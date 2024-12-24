@@ -1,13 +1,17 @@
+import os
+
 import torch
 
-data_list = torch.load("../texas_pyg.pt")
-
+data_list = torch.load("../dataset/texas_pyg.pt")
+save_path = "../dataset/texas/"
 labels = data_list[2]
 torch.manual_seed(0)
 
 print(labels, torch.min(labels), torch.max(labels))
+# 计算标签类型数量
 num_class = torch.max(labels)-torch.min(labels)+1
 print(num_class)
+# 按序存储每个标签类型的所有节点下标
 communities = [[i for i in range(labels.shape[0]) if labels[i]==j] for j in range(num_class)]
 
 # print(communities, len(communities))
@@ -16,8 +20,11 @@ selected_queries = []
 ground_truth = []
 
 for i in range(100):
+    # 选取的节点数量
     num_node = torch.randint(1, 4, (1,)).item()
+    # 选取的社区类型
     selected_class = torch.randint(0, num_class, (1,)).item()
+    # 如果选择的社区类型只有一个节点，修正选择的社区类型为3（为啥类型为3的社区一定能保证节点）
     if len(communities[selected_class]) == 1:
         selected_class = 3
     selected_nodes = []
@@ -27,9 +34,10 @@ for i in range(100):
     selected_queries.append(selected_nodes)
     ground_truth.append(communities[selected_class])
 
-
-query_file=open("texas.query","w")
-gt_file = open("texas.gt", "w")
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
+query_file=open(save_path + "texas.query","w")
+gt_file = open(save_path + "texas.gt", "w")
 
 for i in range(len(selected_queries)):
     for j in range(len(selected_queries[i])):
@@ -47,7 +55,7 @@ coalesced_tensor = adj.coalesce()
 index = coalesced_tensor.indices()
 # print(index)
 
-edge_file = open("texas.edges", "w")
+edge_file = open(save_path + "texas.edges", "w")
 for i in range(index.shape[1]):
     if index[0][i].item() != index[1][i].item():
         edge_file.write(str(index[0][i].item()))

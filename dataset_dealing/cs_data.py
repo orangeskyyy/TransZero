@@ -1,6 +1,9 @@
+import os
+
 import torch
 
-data_list = torch.load("../cs_dgl.pt")
+data_list = torch.load("../dataset/cs_dgl.pt")
+save_path = "../dataset/cs/"
 
 labels = data_list[2]
 torch.manual_seed(0)
@@ -26,9 +29,10 @@ for i in range(100):
     selected_queries.append(selected_nodes)
     ground_truth.append(communities[selected_class])
 
-
-query_file=open("cs.query","w")
-gt_file = open("cs.gt", "w")
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
+query_file=open(save_path + "cs.query","w")
+gt_file = open(save_path + "cs.gt", "w")
 
 for i in range(len(selected_queries)):
     for j in range(len(selected_queries[i])):
@@ -46,7 +50,7 @@ coalesced_tensor = adj.coalesce()
 index = coalesced_tensor.indices()
 # print(index)
 
-edge_file = open("cs.edges", "w")
+edge_file = open(save_path + "cs.edges", "w")
 for i in range(index.shape[1]):
     if index[0][i].item() != index[1][i].item():
         edge_file.write(str(index[0][i].item()))

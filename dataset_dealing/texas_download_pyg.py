@@ -39,4 +39,4 @@ node_embedding = graph.x
 node_embedding = node_embedding.type(torch.LongTensor)
 # print(node_embedding[0][0:100])
 
-torch.save([edge_index_to_sparse_coo(graph.edge_index).type(torch.LongTensor), node_embedding, graph.y.type(torch.LongTensor)], "./dataset/"+dataset_str+"_pyg.pt")
+torch.save([edge_index_to_sparse_coo(graph.edge_index).type(torch.LongTensor), node_embedding, graph.y.type(torch.LongTensor)], "../dataset/"+dataset_str+"_pyg.pt")

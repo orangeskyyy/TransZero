@@ -1,6 +1,9 @@
+import os
+
 import torch
 
-data_list = torch.load("../cora.pt")
+data_list = torch.load("../dataset/cora_pyg.pt")
+save_path = "../dataset/cora/"
 
 labels = data_list[2]
 torch.manual_seed(0)
@@ -26,9 +29,10 @@ for i in range(150):
     selected_queries.append(selected_nodes)
     ground_truth.append(communities[selected_class])
 
-
-query_file=open("cora.query","w")
-gt_file = open("cora.gt", "w")
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
+query_file=open(save_path + "cora.query","w")
+gt_file = open(save_path + "cora.gt", "w")
 
 for i in range(len(selected_queries)):
     for j in range(len(selected_queries[i])):
@@ -46,7 +50,7 @@ coalesced_tensor = adj.coalesce()
 index = coalesced_tensor.indices()
 # print(index)
 
-edge_file = open("cora.edges", "w")
+edge_file = open(save_path + "cora.edges", "w")
 for i in range(index.shape[1]):
     edge_file.write(str(index[0][i].item()))
     edge_file.write(" ")

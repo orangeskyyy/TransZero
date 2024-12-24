@@ -62,6 +62,6 @@ edges = torch.Tensor([edge0, edge1]).type(torch.int)
 print(edges)
 adj = edge_index_to_sparse_coo(edges)
 
-torch.save([adj.type(torch.LongTensor), node_features, node_labels.type(torch.LongTensor)], "./dataset/photo_dgl.pt")
+torch.save([adj.type(torch.LongTensor), node_features, node_labels.type(torch.LongTensor)], "../dataset/photo_dgl.pt")
 
 

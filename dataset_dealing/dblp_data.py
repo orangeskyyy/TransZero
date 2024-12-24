@@ -1,6 +1,9 @@
+import os
+
 import torch
 
-data_list = torch.load("../dblp_pyg.pt")
+data_list = torch.load("../dataset/dblp_pyg.pt")
+save_path = "../dataset/dblp/"
 
 labels = data_list[2]
 torch.manual_seed(0)
@@ -11,7 +14,8 @@ print(num_class)
 communities = [[i for i in range(labels.shape[0]) if labels[i]==j] for j in range(num_class)]
 
 # print(communities, len(communities))
-
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
 selected_queries = []
 ground_truth = []
 
@@ -27,8 +31,8 @@ for i in range(100):
     ground_truth.append(communities[selected_class])
 
 
-query_file=open("dblp.query","w")
-gt_file = open("dblp.gt", "w")
+query_file=open(save_path + "dblp.query","w")
+gt_file = open(save_path + "dblp.gt", "w")
 
 for i in range(len(selected_queries)):
     for j in range(len(selected_queries[i])):
@@ -46,7 +50,7 @@ coalesced_tensor = adj.coalesce()
 index = coalesced_tensor.indices()
 # print(index)
 
-edge_file = open("dblp.edges", "w")
+edge_file = open(save_path + "dblp.edges", "w")
 for i in range(index.shape[1]):
     if index[0][i].item() != index[1][i].item():
         edge_file.write(str(index[0][i].item()))

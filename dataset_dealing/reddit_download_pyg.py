@@ -37,5 +37,5 @@ graph = dataset[0]
 # print(graph.x, graph.edge_index, graph.y)
 print(graph.edge_index)
 
-torch.save([edge_index_to_sparse_coo(graph.edge_index).type(torch.LongTensor), graph.x.type(torch.LongTensor), graph.y.type(torch.LongTensor)], "./dataset/"+dataset_str+"_pyg.pt")
+torch.save([edge_index_to_sparse_coo(graph.edge_index).type(torch.LongTensor), graph.x.type(torch.LongTensor), graph.y.type(torch.LongTensor)], "../dataset/"+dataset_str+"_pyg.pt")
 
