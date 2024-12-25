@@ -103,7 +103,11 @@ def laplacian_positional_encoding(g, pos_enc_dim):
     return lap_pos_enc
 
 
-
+'''
+adj 邻接矩阵
+features 节点特征
+K 子图生成最大邻居条数（本文最大设置为5）
+'''
 def re_features(adj, features, K):
     #传播之后的特征矩阵,size= (N, 1, K+1, d )
     nodes_features = torch.empty(features.shape[0], 1, K+1, features.shape[1])
@@ -111,22 +115,26 @@ def re_features(adj, features, K):
     for i in range(features.shape[0]):
 
         nodes_features[i, 0, 0, :] = features[i]
-
+    # x是features的深拷贝
     x = features + torch.zeros_like(features)
     
     for i in range(K):
-
+        # 通过邻接矩阵 adj 对特征 x 进行矩阵乘法可以进行特征传播
+        # N*d
         x = torch.matmul(adj, x)
 
         for index in range(features.shape[0]):
 
             nodes_features[index, 0, i + 1, :] = x[index]        
-
+    # 使用 squeeze() 方法去除维度为 1 的维度，使最终的 nodes_features 形状为 (N, K+1, d)，表示每个节点在每个传播步骤的特征。
     nodes_features = nodes_features.squeeze()
 
 
     return nodes_features
 
+'''
+计算节点的conductance导通性决定每个节点最大跳数的子图
+'''
 def conductance_hop(adj, max_khop):
     adj = adj.to(dtype=torch.float)
     adj_current_hop = adj
@@ -139,17 +147,22 @@ def conductance_hop(adj, max_khop):
         degree_1 = torch.sum(adj_current_hop_sign, dim=0) 
         results[hop] = (degree-degree_1).to_dense().reshape(1, -1)
         hop += 1
+    # 获取转置矩阵shape=[N,maxHop+1]
     results = results.T
+    # 每个节点的最大conductance值索引
     max_indices = torch.argmax(results, dim=1)
-    
+    # 遍历每个节点
     for i in range(results.shape[0]):
-        for j in range(results.shape[1]):       
+        # 遍历每个节点的conductance值
+        for j in range(results.shape[1]):
+            # 如果当前索引大于最大值索引并且最大值索引不等于0
             if j>max_indices[i] and max_indices[i] != 0:
                 results[i][j] = 0
             else:
                 results[i][j] = 1
+    # 感觉是为了防止参数最大跳数设置为0的情况
     if hop==1:
-        results==torch.ones((max_khop+1, adj.shape[0]))
+        results=torch.ones((max_khop+1, adj.shape[0]))
     return results
 
 # def f1_score_calculation(y_pred, y_true):

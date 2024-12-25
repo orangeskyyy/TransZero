@@ -48,6 +48,11 @@ def edge_index_to_sparse_coo(edge_index):
     size = (7650, 7650)
     # 构建稀疏矩阵
     values = torch.ones_like(row)
+    # sparse_coo_tensor()方法
+    # 将稀疏矩阵以coo的格式存储
+    # https://blog.csdn.net/Fluid_ray/article/details/109629482
+    # coo 和 csr格式介绍
+    # https://blog.csdn.net/qq_42812089/article/details/111637471
     edge_index_sparse = torch.sparse_coo_tensor(torch.stack([row, col]), values, size)
 
     return edge_index_sparse
@@ -61,7 +66,7 @@ edge1 = [int(i) for i in edge1]
 edges = torch.Tensor([edge0, edge1]).type(torch.int)
 print(edges)
 adj = edge_index_to_sparse_coo(edges)
-
+# [adj,features,labels]
 torch.save([adj.type(torch.LongTensor), node_features, node_labels.type(torch.LongTensor)], "../dataset/photo_dgl.pt")
 
 

@@ -36,7 +36,7 @@ def get_dataset(dataset, pe_dim):
 
         # print(graph)
         graph = dgl.to_bidirected(graph)
-        
+        # cora size=2708,3
         lpe = utils.laplacian_positional_encoding(graph, pe_dim) 
      
         features = torch.cat((features, lpe), dim=1)

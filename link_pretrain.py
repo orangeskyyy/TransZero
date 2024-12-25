@@ -1,7 +1,6 @@
 from data_loader import get_dataset
 
 import time
-import utils
 import random
 import argparse
 import numpy as np
@@ -12,13 +11,13 @@ from model import PretrainModel
 from lr import PolynomialDecayLR
 import os.path
 import torch.utils.data as Data
-from utils import *
+import utils
 
 
 
 if __name__ == "__main__":
 
-    args = parse_args()
+    args = utils.parse_args()
     print(args)
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -31,6 +30,7 @@ if __name__ == "__main__":
 
     start_feature_processing = time.time()
     processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
+    # 节点数量小于10000
     if processed_features.shape[0] < 10000:
         indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
         indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
@@ -40,9 +40,10 @@ if __name__ == "__main__":
 
     start = time.time()
     print("starting transformer to coo")
-    adj = transform_coo_to_csr(adj) # transform to csr to support slicing operation
+    adj = utils.transform_coo_to_csr(adj) # transform to csr to support slicing operation
     print("start mini batch processing")
-    adj_batch, minus_adj_batch = transform_sp_csr_to_coo(adj, args.batch_size, features.shape[0]) # transform to coo to support tensor operation
+    # 正负邻接矩阵样本
+    adj_batch, minus_adj_batch = utils.transform_sp_csr_to_coo(adj, args.batch_size, features.shape[0]) # transform to coo to support tensor operation
     print(len(adj_batch[0]), len(minus_adj_batch[0]))
     print("adj process time: {:.4f}s".format(time.time() - start))
     
@@ -127,7 +128,7 @@ if __name__ == "__main__":
             new_node_embedding = np.concatenate((node_tensor.cpu().detach().numpy(), neighbor_tensor.cpu().detach().numpy()), axis=1)
             # new_node_embedding = node_tensor.cpu().detach().numpy()
             node_embedding = np.concatenate((node_embedding, new_node_embedding), axis=0)
-    
+    # 保存的节点预训练的embedding
     np.save(args.embedding_path + args.model_name + '.npy', node_embedding)
 
     
