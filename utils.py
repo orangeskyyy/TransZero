@@ -132,24 +132,26 @@ def re_features(adj, features, K):
 
     return nodes_features
 
-'''
-计算节点的conductance导通性决定每个节点最大跳数的子图
-'''
 def conductance_hop(adj, max_khop):
     adj = adj.to(dtype=torch.float)
     adj_current_hop = adj
 
     results = torch.zeros((max_khop+1, adj.shape[0]))
     for hop in range(max_khop+1):
+        # 矩阵乘法，计算当前跳数的邻接矩阵，计算当前跳数的邻接矩阵
         adj_current_hop = torch.matmul(adj_current_hop, adj)
+        # 计算当前跳数下每个节点的度数，即 adj_current_hop 中每列的和。这表示从每个节点出发可以到达的邻居数量。
         degree = torch.sum(adj_current_hop, dim=0)
+        # 计算当前邻接矩阵的符号矩阵，返回每个元素的符号（正数为 1，负数为 -1，零为 0）。
         adj_current_hop_sign = torch.sign(adj_current_hop)
-        degree_1 = torch.sum(adj_current_hop_sign, dim=0) 
+        # 然后对符号矩阵按列求和，得到 degree_1，这表示在当前跳数下有多少个邻居是可达的。
+        degree_1 = torch.sum(adj_current_hop_sign, dim=0)
+        # 计算度数的差异 degree - degree_1，这表示在当前跳数下，有多少个邻居是新的（即在当前跳数中新增的连接），将形状调整为(1,N) -1表示自动计算
         results[hop] = (degree-degree_1).to_dense().reshape(1, -1)
         hop += 1
     # 获取转置矩阵shape=[N,maxHop+1]
     results = results.T
-    # 每个节点的最大conductance值索引
+    # 找到每个节点的
     max_indices = torch.argmax(results, dim=1)
     # 遍历每个节点
     for i in range(results.shape[0]):
