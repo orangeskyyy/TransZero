@@ -7,11 +7,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from early_stop import EarlyStopping, Stop_args
-from model import PretrainModel
+from model import Model
 from lr import PolynomialDecayLR
 import os.path
 import torch.utils.data as Data
 import utils
+import pretrain
 
 
 
@@ -24,9 +25,13 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
-    
-    adj, features = get_dataset(args.dataset, args.pe_dim)
-    
+
+    adj,features,lpe,labels = get_dataset(args.dataset, args.pe_dim)
+    if args.pretrain == 1:
+        hidden,fusion_emb = pretrain.train(adj,features,labels)
+    else:
+        fusion_emb = torch.load('pretrained/{}_{}.pt'.format(args.dataset,args.hid_dim[0]))
+    features = torch.cat((fusion_emb, lpe), dim=1)
 
     start_feature_processing = time.time()
     processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
@@ -51,7 +56,7 @@ if __name__ == "__main__":
     data_loader = Data.DataLoader(processed_features, batch_size=args.batch_size, shuffle = False)
 
     # model configuration
-    model = PretrainModel(input_dim=processed_features.shape[2], config=args).to(args.device)
+    model = Model(input_dim=processed_features.shape[2], config=args).to(args.device)
 
     print(model)
     print('total params:', sum(p.numel() for p in model.parameters()))
@@ -120,6 +125,7 @@ if __name__ == "__main__":
     node_embedding = []
     for _, item in enumerate(data_loader):
         nodes_features = item.to(args.device)
+        # node_tensor(2708,512) neighbor_tensor(2708,512)
         node_tensor, neighbor_tensor = model(nodes_features)
         if len(node_embedding) == 0:
             node_embedding = np.concatenate((node_tensor.cpu().detach().numpy(), neighbor_tensor.cpu().detach().numpy()), axis=1)

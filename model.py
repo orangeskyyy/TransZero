@@ -5,7 +5,7 @@ from layer import TransformerBlock
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool, GCNConv
 from utils import is_edge_in_edge_index
 
-class PretrainModel(nn.Module):
+class Model(nn.Module):
     def __init__(self, input_dim, config):
         super().__init__()
         self.input_dim = input_dim
