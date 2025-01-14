@@ -31,6 +31,7 @@ class Model(nn.Module):
         self.marginloss = nn.MarginRankingLoss(0.5)
 
     def forward(self, x):
+        # todo 增加moe混合层
         node_tensor, neighbor_tensor = self.encoder(x) # (batch_size, 1, hidden_dim), (batch_size, hops, hidden_dim)
         neighbor_tensor = self.readout(neighbor_tensor, torch.tensor([0]).to(self.config.device)) # (batch_size, 1, hidden_dim)
         return node_tensor.squeeze(), neighbor_tensor.squeeze()

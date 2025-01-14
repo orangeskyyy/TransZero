@@ -3,9 +3,11 @@ import scipy.sparse as sp
 import torch.nn.functional as F
 import numpy as np
 import torch
-import metis
+import pymetis as metis
 import os
 import dgl
+
+import utils
 from layer import GraphConvolution
 
 
@@ -51,7 +53,7 @@ class Par(nn.Module):
         return embeddings
 
     def get_label(self, nparts):
-        partition_file = './saved/' + self.args.dataset + '_partition_%s.npy' % nparts
+        partition_file = './pretrained_embedding/partition/' + self.args.dataset + '_partition_%s.npy' % nparts
         if not os.path.exists(partition_file):
             print('Perform graph partitioning with Metis...')
 
@@ -70,7 +72,8 @@ class Par(nn.Module):
                     continue
                 adj_list[i].append(j)
 
-            _, partition_labels =  metis.part_graph(adj_list, nparts=nparts, seed=0)
+            _, partition_labels = metis.part_graph(nparts=nparts, adjacency=adj_list)
+            np.save(partition_file,partition_labels)
             return torch.LongTensor(partition_labels)
         else:
             partition_labels = np.load(partition_file)

@@ -27,11 +27,13 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(args.seed)
 
     adj,features,lpe,labels = get_dataset(args.dataset, args.pe_dim)
-    if args.pretrain == 1:
-        hidden,fusion_emb = pretrain.train(adj,features,labels)
-    else:
-        fusion_emb = torch.load('pretrained/{}_{}.pt'.format(args.dataset,args.hid_dim[0]))
-    features = torch.cat((fusion_emb, lpe), dim=1)
+    # if args.pretrain and not os.path.exists('pretrained_embedding/{}.pt'.format(args.dataset)):
+    #     fusion_emb = pretrain.train(args,adj,features,labels).cpu()
+    #     torch.save(fusion_emb,'pretrained_embedding/{}.pt'.format(args.dataset))
+    # else:
+    #     fusion_emb = torch.load('pretrained_embedding/{}.pt'.format(args.dataset))
+    # features = torch.cat((fusion_emb, lpe), dim=1).long()
+    features = torch.cat((features, lpe), dim=1).long()
 
     start_feature_processing = time.time()
     processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)

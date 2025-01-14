@@ -29,6 +29,15 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=0, 
                         help='Random seed.')
 
+    # pretrain parameters
+    parser.add_argument('--pretrain',action='store_true',help='设置则为true')
+    parser.add_argument('--encoder', type=str, default="ARVGA", help='the model name')
+    parser.add_argument('--hid_dim', type=int, nargs='+', default=[256, 128, 512])
+    parser.add_argument('--lr_pretrain', type=float, default=0.001, help='Initial learning rate.')
+    parser.add_argument('--pretrain_epochs', type=int, default=400, help='Number of pretrained totalssl epochs.')
+    parser.add_argument('--w_ssl_stage_one', type=float, default=0.25, help='the ssl_loss weight of pretrain stage one')
+    parser.add_argument('--top_k', type=int, default=5, help='The number of experts to choose.')
+
     # model parameters
     parser.add_argument('--hops', type=int, default=7,
                         help='Hop of neighbors to be calculated')
@@ -96,9 +105,9 @@ def laplacian_positional_encoding(g, pos_enc_dim):
 
     # Eigenvectors with scipy
     #EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
-    EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR', tol=1e-2) # for 40 PEs
-    EigVec = EigVec[:, EigVal.argsort()] # increasing order
-    lap_pos_enc = torch.from_numpy(EigVec[:,1:pos_enc_dim+1]).float() 
+    eig_val, eig_vec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR', tol=1e-2) # for 40 PEs
+    eig_vec = eig_vec[:, eig_val.argsort()] # increasing order
+    lap_pos_enc = torch.from_numpy(eig_vec[:,1:pos_enc_dim+1]).float()
 
     return lap_pos_enc
 
@@ -129,7 +138,7 @@ def re_features(adj, features, K):
     # 使用 squeeze() 方法去除维度为 1 的维度，使最终的 nodes_features 形状为 (N, K+1, d)，表示每个节点在每个传播步骤的特征。
     nodes_features = nodes_features.squeeze()
 
-
+    # 返回特征在K次对邻居节点聚合操作的节点特征（相当于获得0-K跳节点的特征聚合）
     return nodes_features
 
 def conductance_hop(adj, max_khop):
@@ -137,10 +146,10 @@ def conductance_hop(adj, max_khop):
     adj_current_hop = adj
 
     results = torch.zeros((max_khop+1, adj.shape[0]))
-    for hop in range(max_khop+1):
+    for hop in range(1,max_khop+1):
         # 矩阵乘法，计算当前跳数的邻接矩阵，计算当前跳数的邻接矩阵
         adj_current_hop = torch.matmul(adj_current_hop, adj)
-        # 计算当前跳数下每个节点的度数，即 adj_current_hop 中每列的和。这表示从每个节点出发可以到达的邻居数量。
+        # 计算当前跳数下每个节点的度数，即 adj_current_hop 中每列的和。这表示从每个节点出发可以到达的邻居数量。N*1
         degree = torch.sum(adj_current_hop, dim=0)
         # 计算当前邻接矩阵的符号矩阵，返回每个元素的符号（正数为 1，负数为 -1，零为 0）。
         adj_current_hop_sign = torch.sign(adj_current_hop)
@@ -149,20 +158,15 @@ def conductance_hop(adj, max_khop):
         # 计算度数的差异 degree - degree_1，这表示在当前跳数下，有多少个邻居是新的（即在当前跳数中新增的连接），将形状调整为(1,N) -1表示自动计算
         results[hop] = (degree-degree_1).to_dense().reshape(1, -1)
         hop += 1
-    # 获取转置矩阵shape=[N,maxHop+1]
-    results = results.T
-    # 找到每个节点的
+    results = results.T  # 获取转置矩阵shape=[N,maxHop+1]
     max_indices = torch.argmax(results, dim=1)
-    # 遍历每个节点
     for i in range(results.shape[0]):
-        # 遍历每个节点的conductance值
         for j in range(results.shape[1]):
             # 如果当前索引大于最大值索引并且最大值索引不等于0
             if j>max_indices[i] and max_indices[i] != 0:
                 results[i][j] = 0
             else:
                 results[i][j] = 1
-    # 感觉是为了防止参数最大跳数设置为0的情况
     if hop==1:
         results=torch.ones((max_khop+1, adj.shape[0]))
     return results

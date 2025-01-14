@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import scipy.sparse as sp
 from sklearn.cluster import KMeans
+
+import utils
+from early_stop import Stop_args, EarlyStopping
 from layer import GraphConvolution
 from deeprobust.graph.utils import to_tensor, normalize_adj_tensor
 import torch.optim as optim
@@ -27,7 +30,7 @@ class EmptyData:
 
 
 class PretrainModel(nn.Module):
-    def __init__(self, adj ,feature,labels, encoder, modeldis, set_of_ssl, args, device='cuda', **kwargs):
+    def __init__(self, data,feature_dim,encoder, modeldis, set_of_ssl, args, device, **kwargs):
         super(PretrainModel, self).__init__()
         self.args = args
         self.n_tasks = len(set_of_ssl)
@@ -37,14 +40,13 @@ class PretrainModel(nn.Module):
         self.encoder = encoder.to(self.device)
         self.modeldis = modeldis.to(self.device)
         self.weight = torch.ones(len(set_of_ssl)).to(self.device)
-        self.gate = NaiveGate(args.hid_dim[1], self.n_tasks, self.args.top_k)
+        self.gate = NaiveGate(args.hid_dim[1], self.n_tasks, self.args.top_k).to(self.device)
+        self.fc = nn.Linear(args.hid_dim[1], feature_dim).to(self.device)
         self.ssl_agent = []
         self.optimizer_dec = None
         self.optimizer_dis = None
 
-        self.adj = adj
-        self.feature = feature
-        self.labels = labels
+        self.data = data
         self.processed_data = EmptyData()
         self.data_process()
         self.params = None
@@ -53,10 +55,10 @@ class PretrainModel(nn.Module):
     def data_process(self):
         features, adj, labels = to_tensor(self.data.features,
                                           self.data.adj, self.data.labels, device=self.device)
-        adj_norm = normalize_adj_tensor(self.adj, sparse=True)
+        adj_norm = normalize_adj_tensor(adj, sparse=True)
         self.processed_data.adj_norm = adj_norm
-        self.processed_data.features = self.features
-        self.processed_data.labels = self.labels
+        self.processed_data.features = features
+        self.processed_data.labels = labels
 
         adj_label = self.data.adj + sp.eye(self.data.adj.shape[0])
         self.processed_data.adj_label = torch.FloatTensor(adj_label.toarray()).to(self.device)
@@ -95,6 +97,9 @@ class PretrainModel(nn.Module):
         args = self.args
         arga = 1
 
+        stopping_args = Stop_args(patience=args.patience, max_epochs=args.epochs)
+        early_stopping = EarlyStopping(self.encoder, **stopping_args)
+        loss_pretrain = []
         for i in range(self.args.pretrain_epochs):
             self.encoder.train()
             self.optimizer_TotalSSL.zero_grad()
@@ -123,16 +128,13 @@ class PretrainModel(nn.Module):
 
             loss.backward()
             self.optimizer_TotalSSL.step()
-
-        hidden, _, mu, _, _ = self.encoder(features, adj_norm)
-        fusion_emb, _, _ = self.FeatureFusionForward(mu)
-        if self.args.pretrain == 1:
-            name = 'TotalSSL'
-            torch.save(fusion_emb,'pretrained/{}_{}.pt'.format(args.dataset,args.hid_dim[0]))
-            # torch.save(self.encoder.state_dict(),
-            #            f"./pretrained/{name}_{self.args.encoder}_{self.args.dataset}_{self.args.hid_dim[0]}.pkl")
-
-        return hidden, fusion_emb
+            loss_pretrain.append(loss)
+            if early_stopping.simple_check(loss_pretrain):
+                break
+        self.encoder.eval()
+        # mu: (num_nodes, hidden_dim[2])
+        _, _, mu, _, _ = self.encoder(features, adj_norm)
+        return mu
 
     def FeatureFusionForward(self, z_embeddings):
         nodes_weight_ori, loss_balan = self.gate(z_embeddings, 0)

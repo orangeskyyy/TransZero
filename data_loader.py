@@ -20,7 +20,7 @@ def get_dataset(dataset, pe_dim):
         adj = data_list[0]
         
         features = data_list[1]
-        
+        labels = data_list[2]
         if dataset == "pubmed":
             graph = PubmedGraphDataset()[0]
         elif dataset == "photo":
@@ -39,7 +39,7 @@ def get_dataset(dataset, pe_dim):
         # cora size=2708,3
         lpe = utils.laplacian_positional_encoding(graph, pe_dim) 
      
-        features = torch.cat((features, lpe), dim=1)
+        # features = torch.cat((features, lpe), dim=1)
     
     
     elif dataset in {"texas", "cornell", "wisconsin", "dblp", "reddit"}:
@@ -54,13 +54,10 @@ def get_dataset(dataset, pe_dim):
         adj_scipy = utils.torch_adj_to_scipy(adj)
         graph = dgl.from_scipy(adj_scipy)
         lpe = utils.laplacian_positional_encoding(graph, pe_dim) 
-        features = torch.cat((features, lpe), dim=1)
-    
-    
+        # features = torch.cat((features, lpe), dim=1)
 
     print(type(adj), type(features))
-    
-    return adj.cpu().type(torch.LongTensor), features.long()
+    return adj.cpu().type(torch.LongTensor),features,lpe,labels
 
 
 

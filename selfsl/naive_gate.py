@@ -45,7 +45,7 @@ class NaiveGate(BaseGate):
 
         gate_score = F.softmax(gate_top_k_val, dim=-1)
 
-        new_gates_score = torch.zeros_like(gate, requires_grad=True).cuda()
+        new_gates_score = torch.zeros_like(gate, requires_grad=True)
         gates = new_gates_score.scatter(1, gate_top_k_idx, gate_score)
 
         load = self._gates_to_load(new_gates_score)
