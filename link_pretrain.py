@@ -12,8 +12,20 @@ from lr import PolynomialDecayLR
 import os.path
 import torch.utils.data as Data
 import utils
-import pretrain
+from pretrain_model import PretrainModel, VGAE, Discriminator
+from deeprobust.graph.data import Dataset
 
+
+class pyg2dpr(Dataset):
+    def __init__(self, adj,features,labels):
+
+
+        self.adj = utils.transform_coo_to_csr(adj)
+        self.features = features.numpy()
+        self.labels = labels.numpy()
+
+        if len(self.labels.shape) == 2 and self.labels.shape[1] == 1:
+            self.labels = self.labels.reshape(-1)
 
 
 if __name__ == "__main__":
@@ -27,16 +39,30 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(args.seed)
 
     adj,features,lpe,labels = get_dataset(args.dataset, args.pe_dim)
-    # if args.pretrain and not os.path.exists('pretrained_embedding/{}.pt'.format(args.dataset)):
-    #     fusion_emb = pretrain.train(args,adj,features,labels).cpu()
-    #     torch.save(fusion_emb,'pretrained_embedding/{}.pt'.format(args.dataset))
-    # else:
-    #     fusion_emb = torch.load('pretrained_embedding/{}.pt'.format(args.dataset))
-    # features = torch.cat((fusion_emb, lpe), dim=1).long()
-    features = torch.cat((features, lpe), dim=1).long()
-
+    feat_dim = features.shape[1]
+    gate_dim = args.hid_dim[1]+lpe.shape[1]
+    data = pyg2dpr(adj, features, labels)
+    encoder = VGAE(feat_dim, args.hid_dim[0], args.hid_dim[1], 0.0)
+    modeldis = Discriminator(args.hid_dim[0], args.hid_dim[1], args.hid_dim[2])
+    set_of_ssl = ['PairwiseAttrSim', 'PairwiseDistance', 'Par', 'Clu', 'DGI']
+    if adj.shape[0] > 5000:
+        print("use the DGISample")
+        local_set_of_ssl = [ssl if ssl != 'DGI' else 'DGISample' for ssl in set_of_ssl]
+    else:
+        local_set_of_ssl = set_of_ssl
+    pretrain_model = PretrainModel(data,encoder, modeldis, local_set_of_ssl, args,
+                                   device=args.device).to(args.device)
+    if args.pretrain and not os.path.exists('pretrained_embedding/{}.pt'.format(args.dataset)):
+        pretrain_model.train()
+        pretrain_embedding = pretrain_model.TotalSSLpretrain().to(args.device).cpu()
+        pretrain_model.eval()
+        torch.save(pretrain_embedding,'pretrained_embedding/{}.pt'.format(args.dataset))
+    else:
+        pretrain_embedding = torch.load('pretrained_embedding/{}.pt'.format(args.dataset))
+    # features = torch.cat((pretrain_embedding, lpe), dim=1).long()
+    features = pretrain_embedding
     start_feature_processing = time.time()
-    processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
+    processed_features = utils.re_features(adj, features.long(), args.hops)  # return (N, hops+1, d)
     # 节点数量小于10000
     if processed_features.shape[0] < 10000:
         indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
@@ -58,7 +84,7 @@ if __name__ == "__main__":
     data_loader = Data.DataLoader(processed_features, batch_size=args.batch_size, shuffle = False)
 
     # model configuration
-    model = Model(input_dim=processed_features.shape[2], config=args).to(args.device)
+    model = Model(input_dim=processed_features.shape[2], pretrain_model=pretrain_model, args=args).to(args.device)
 
     print(model)
     print('total params:', sum(p.numel() for p in model.parameters()))

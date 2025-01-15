@@ -50,7 +50,7 @@ def get_dataset(dataset, pe_dim):
         adj = data_list[0]
         
         features = data_list[1]
-        
+        labels = data_list[2]
         adj_scipy = utils.torch_adj_to_scipy(adj)
         graph = dgl.from_scipy(adj_scipy)
         lpe = utils.laplacian_positional_encoding(graph, pe_dim) 

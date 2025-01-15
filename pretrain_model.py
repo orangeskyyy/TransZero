@@ -30,7 +30,7 @@ class EmptyData:
 
 
 class PretrainModel(nn.Module):
-    def __init__(self, data,feature_dim,encoder, modeldis, set_of_ssl, args, device, **kwargs):
+    def __init__(self, data,encoder, modeldis, set_of_ssl, args, device, **kwargs):
         super(PretrainModel, self).__init__()
         self.args = args
         self.n_tasks = len(set_of_ssl)
@@ -41,7 +41,6 @@ class PretrainModel(nn.Module):
         self.modeldis = modeldis.to(self.device)
         self.weight = torch.ones(len(set_of_ssl)).to(self.device)
         self.gate = NaiveGate(args.hid_dim[1], self.n_tasks, self.args.top_k).to(self.device)
-        self.fc = nn.Linear(args.hid_dim[1], feature_dim).to(self.device)
         self.ssl_agent = []
         self.optimizer_dec = None
         self.optimizer_dis = None
@@ -100,6 +99,7 @@ class PretrainModel(nn.Module):
         stopping_args = Stop_args(patience=args.patience, max_epochs=args.epochs)
         early_stopping = EarlyStopping(self.encoder, **stopping_args)
         loss_pretrain = []
+        print(f'start pretraining')
         for i in range(self.args.pretrain_epochs):
             self.encoder.train()
             self.optimizer_TotalSSL.zero_grad()
@@ -131,6 +131,7 @@ class PretrainModel(nn.Module):
             loss_pretrain.append(loss)
             if early_stopping.simple_check(loss_pretrain):
                 break
+        print(f'end pretraining')
         self.encoder.eval()
         # mu: (num_nodes, hidden_dim[2])
         _, _, mu, _, _ = self.encoder(features, adj_norm)
