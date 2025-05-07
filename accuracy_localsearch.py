@@ -14,10 +14,9 @@ def parse_args():
     # parse parameters
     parser = argparse.ArgumentParser()
     # main parameters
-    parser.add_argument('--dataset', type=str, default='cora', help='dataset name')
+    parser.add_argument('--dataset', type=str, default='dblp', help='dataset name')
     parser.add_argument('--embedding_tensor_name', type=str, help='embedding tensor name')
     parser.add_argument('--EmbeddingPath', type=str, default='./pretrain_result/', help='embedding path')
-    parser.add_argument('--topk', type=int, default=400, help='the number of nodes selected.')
 
     return parser.parse_args()
 

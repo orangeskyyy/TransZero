@@ -13,11 +13,11 @@ def parse_args():
     # parse parameters
     parser = argparse.ArgumentParser()
     # main parameters
-    parser.add_argument('--dataset', type=str, default='cora', help='dataset name')
+    parser.add_argument('--dataset', type=str, default='dblp', help='dataset name')
     parser.add_argument('--embedding_tensor_name', type=str, help='embedding tensor name')
     parser.add_argument('--EmbeddingPath', type=str, default='./pretrain_result/', help='embedding path')
-    parser.add_argument('--topk', type=int, default=400, help='the number of nodes selected.')
-
+    parser.add_argument('--sampler_method',typ=str,default='conductance',help='数据采样方法')
+    parser.add_argument('--encoder_method',typ=str,default='transformer',help='编码器方法')
     return parser.parse_args()
 
 def subgraph_density_controled(candidate_score, graph_score):
