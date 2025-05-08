@@ -5,6 +5,7 @@ import multiprocessing as mp
 from scipy import sparse as sp
 from sklearn.preprocessing import normalize, StandardScaler
 from torch_geometric.data import Data, Batch
+import utils
 
 
 class PPR:
@@ -130,15 +131,6 @@ class Subgraph:
             self.subgraph[i] = Data(x, edge)
         torch.save(self.subgraph, self.path + '_subgraph')
 
-    def search(self, node_list):
+    def search(self, adj):
         # Extract subgraphs for nodes in the list
-        batch = []
-        index = []
-        size = 0
-        for node in node_list:
-            batch.append(self.subgraph[node])
-            index.append(size)
-            size += self.subgraph[node].x.size(0)
-        index = torch.tensor(index)
-        batch = Batch().from_data_list(batch)
-        return batch, index
+        return utils.conductance_hop(adj, 5)

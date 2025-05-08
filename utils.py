@@ -571,6 +571,5 @@ def get_fast_silhouette(feats: torch.Tensor, labels: torch.Tensor, goal=1.0):
 
 def subgraph(adj,features):
     edge_index = transform_coo_to_edge_index(adj)
-    subgraph = Subgraph(x=features,edge_index=edge_index,)
-    subgraph.build()
-    return subgraph.search()
+    sub_graph = Subgraph(x=features, edge_index=edge_index)
+    return sub_graph.search(adj)

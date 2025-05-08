@@ -33,9 +33,9 @@ if __name__ == "__main__":
     if processed_features.shape[0] < 10000:
         if args.sampler == 'conductance':
             indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
-            indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
         else:
             indicator = utils.subgraph(adj)
+        indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
         processed_features = processed_features*indicator
     t_feature_precessing = time.time() - start_feature_processing
     print("feature process time: {:.4f}s".format(t_feature_precessing))
