@@ -71,7 +71,7 @@ class PretrainModel(nn.Module):
 
         return TotalLoss
 
-    def cvis_loss(self,tensor,num_clusters,k_init,clustering_metric):
+    def cvis_loss(self,tensor,cluster_method,num_clusters,k_init,clustering_metric):
         '''
         :param tensor:
         :param num_clusters: 聚类中心数量（超参数）
@@ -81,7 +81,7 @@ class PretrainModel(nn.Module):
         '''
         tensor = torch.squeeze(tensor,dim=1)
         norm_tensor = F.normalize(tensor, dim=1)
-        cluster_ids_x = self.clustering(tensor.cpu(),'kmeans',num_clusters,k_init)
+        cluster_ids_x = self.clustering(tensor.cpu(),cluster_method,num_clusters,k_init)
         if clustering_metric == 'silhouette':
             loss = get_silhouette_score(norm_tensor, cluster_ids_x, goal=1)
         elif clustering_metric == 'fast_silhouette':

@@ -98,15 +98,14 @@ if __name__ == "__main__":
 
             # print(node_tensor.shape, neighbor_tensor.shape, adj_.shape, minus_adj.shape)
             if args.cvi_method == 'silhouette':
-                loss_cvi = model.cvis_loss(node_tensor,args.num_clusters,args.k_init,'silhouette')
+                loss_cvi = model.cvis_loss(node_tensor,args.cluster,args.num_clusters,args.k_init,'silhouette')
             elif args.cvi_method == 'fast_silhouette':
-                loss_cvi = model.cvis_loss(node_tensor,args.num_clusters,args.k_init,'fast_silhouette')
+                loss_cvi = model.cvis_loss(node_tensor,args.cluster,args.num_clusters,args.k_init,'fast_silhouette')
             else:
-                loss_cvi = model.cvis_loss(node_tensor, args.num_clusters, args.k_init, 'vrc')
+                loss_cvi = model.cvis_loss(node_tensor, args.cluster,args.num_clusters, args.k_init, 'vrc')
 
             loss_cl = model.contrastive_link_loss(node_tensor, neighbor_tensor, adj_, minus_adj)
             loss_train = loss_cl + args.alpha*loss_cvi
-            loss_train = loss_cl
             loss_train.backward()
             optimizer.step()
             lr_scheduler.step()
