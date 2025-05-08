@@ -30,10 +30,12 @@ if __name__ == "__main__":
 
     start_feature_processing = time.time()
     processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
-    # 节点数量小于10000
     if processed_features.shape[0] < 10000:
-        indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
-        indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
+        if args.sampler == 'conductance':
+            indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
+            indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
+        else:
+            indicator = utils.subgraph(adj)
         processed_features = processed_features*indicator
     t_feature_precessing = time.time() - start_feature_processing
     print("feature process time: {:.4f}s".format(t_feature_precessing))
@@ -68,6 +70,12 @@ if __name__ == "__main__":
     stopping_args = Stop_args(patience=args.patience, max_epochs=args.epochs)
     early_stopping = EarlyStopping(model, **stopping_args)
 
+
+    if not os.path.exists(args.save_path):
+        os.makedirs(args.save_path)
+
+    if not os.path.exists(args.embedding_path):
+        os.makedirs(args.embedding_path)
     print("starting training...")
     # model train
     model.train()
@@ -75,6 +83,8 @@ if __name__ == "__main__":
     t_start = time.time()
 
     loss_train_b = []
+    # 初始化最小损失值为正无穷
+    min_loss = float('inf')
     for epoch in range(args.epochs):
         for index, item in enumerate(data_loader):
 
@@ -87,10 +97,25 @@ if __name__ == "__main__":
             node_tensor, neighbor_tensor = model(nodes_features)
 
             # print(node_tensor.shape, neighbor_tensor.shape, adj_.shape, minus_adj.shape)
-            loss_train = model.contrastive_link_loss(node_tensor, neighbor_tensor, adj_, minus_adj)
+            if args.cvi_method == 'silhouette':
+                loss_cvi = model.cvis_loss(node_tensor,args.num_clusters,args.k_init,'silhouette')
+            elif args.cvi_method == 'fast_silhouette':
+                loss_cvi = model.cvis_loss(node_tensor,args.num_clusters,args.k_init,'fast_silhouette')
+            else:
+                loss_cvi = model.cvis_loss(node_tensor, args.num_clusters, args.k_init, 'vrc')
+
+            loss_cl = model.contrastive_link_loss(node_tensor, neighbor_tensor, adj_, minus_adj)
+            loss_train = loss_cl + args.alpha*loss_cvi
+            loss_train = loss_cl
             loss_train.backward()
             optimizer.step()
             lr_scheduler.step()
+            if loss_train.item() < min_loss:
+                min_loss = loss_train.item()
+                # 保存当前模型的编码器参数
+                # torch.save(model.encoder.state_dict(), args.save_path + args.dataset + '.pth')
+                torch.save(model.state_dict(), args.save_path + args.dataset + '.pth')
+                print(f'Best model saved with loss: {min_loss:.4f}')
             loss_train_b.append(loss_train.item())
             # break
 
@@ -104,23 +129,19 @@ if __name__ == "__main__":
     print("Optimization Finished!")
     print("Train time: {:.4f}s".format(time.time() - t_start + t_feature_precessing))
 
-    # model save
-    print("Start Save Model...")
-
-    if not os.path.exists(args.save_path):
-        os.makedirs(args.save_path)
-    
-    if not os.path.exists(args.embedding_path):
-        os.makedirs(args.embedding_path)
-
-    torch.save(model.state_dict(), args.save_path + args.model_name + '.pth')
-    
-    # obtain all the node embedding from the learned model
+    # obtain all the node embedding from the learned encoder
     model.eval()
     node_embedding = []
+    print('Start loading encoder....')
+    best_model = PretrainModel(input_dim=processed_features.shape[2], config=args).to(args.device)
+    best_model.load_state_dict(torch.load(args.save_path + args.dataset + '.pth'))
+    # best_model.encoder.load_state_dict(torch.load(args.save_path + args.dataset + '.pth'))
     for _, item in enumerate(data_loader):
         nodes_features = item.to(args.device)
-        node_tensor, neighbor_tensor = model(nodes_features)
+        node_tensor, neighbor_tensor = best_model(nodes_features) #(2708,512)
+        # node_tensor, neighbor_tensor = best_model.encoder(nodes_features) #(2708,512)
+        # neighbor_tensor = best_model.readout(neighbor_tensor, torch.tensor([0]).to(args.device))
+        # node_tensor, neighbor_tensor = node_tensor.squeeze(), neighbor_tensor.squeeze()
         if len(node_embedding) == 0:
             node_embedding = np.concatenate((node_tensor.cpu().detach().numpy(), neighbor_tensor.cpu().detach().numpy()), axis=1)
             # node_embedding = node_tensor.cpu().detach().numpy()
@@ -129,8 +150,5 @@ if __name__ == "__main__":
             # new_node_embedding = node_tensor.cpu().detach().numpy()
             node_embedding = np.concatenate((node_embedding, new_node_embedding), axis=0)
     # 保存的节点预训练的embedding
-    np.save(args.embedding_path + args.model_name + '.npy', node_embedding)
-
-    
-
-
+    print('start saving node embedding...')
+    np.save(args.embedding_path + args.dataset  + '.npy', node_embedding)
