@@ -11,7 +11,7 @@ import numpy as np
 import networkx as nx
 from numpy import *
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score, jaccard_score
-
+from sub_generate import Subgraph
 # Training settings
 def parse_args():
     """
@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument('--name', type=str, default=None)
     parser.add_argument('--dataset', type=str, default='cora',
                         help='Choose from {pubmed}')
-    parser.add_argument('--device', type=int, default=1, 
+    parser.add_argument('--device', type=int, default=0,
                         help='Device cuda id')
     parser.add_argument('--seed', type=int, default=0, 
                         help='Random seed.')
@@ -78,6 +78,15 @@ def parse_args():
     parser.add_argument('--embedding_path', type=str, default='./pretrain_result/',
                         help='The path for the embedding to save')
 
+    # model ablation
+    parser.add_argument('--encoder',type=str,default='transformer')
+    parser.add_argument('--sampler',type=str,default='conductance')
+    parser.add_argument('--cluster',type=str,default='kmeans')
+
+    # clustering parameters
+    parser.add_argument('--num_clusters', type=int, default=12,help='聚类中心数量')
+    parser.add_argument('--k_init', type=int, default=5, help='聚类初始化次数')
+    parser.add_argument('--cvi_method', type=str, default="silhouette",help='cvi指数计算方法')
     return parser.parse_args()
 
 
@@ -133,38 +142,48 @@ def re_features(adj, features, K):
     return nodes_features
 
 def conductance_hop(adj, max_khop):
+    # 确保邻接矩阵的数据类型为 torch.float
     adj = adj.to(dtype=torch.float)
+    # 初始化当前跳数的邻接矩阵为原始邻接矩阵
     adj_current_hop = adj
 
+    # 创建一个全零的张量 results，用于存储每一跳的计算结果
+    # 形状为 (max_khop + 1, adj.shape[0])，其中 max_khop + 1 表示跳数（包括 0 跳），adj.shape[0] 表示节点数
     results = torch.zeros((max_khop+1, adj.shape[0]))
+
+    # 遍历从 0 到 max_khop 的每一跳
     for hop in range(max_khop+1):
-        # 矩阵乘法，计算当前跳数的邻接矩阵，计算当前跳数的邻接矩阵
+        # 计算当前跳数的邻接矩阵与原始邻接矩阵的矩阵乘法，得到下一跳的邻接矩阵
         adj_current_hop = torch.matmul(adj_current_hop, adj)
-        # 计算当前跳数下每个节点的度数，即 adj_current_hop 中每列的和。这表示从每个节点出发可以到达的邻居数量。
+        # 计算每一列的元素和，即每个节点的度（下一跳的度）
         degree = torch.sum(adj_current_hop, dim=0)
-        # 计算当前邻接矩阵的符号矩阵，返回每个元素的符号（正数为 1，负数为 -1，零为 0）。
+        # 对当前跳数的邻接矩阵取符号，将非零元素变为 1，零元素保持为 0
         adj_current_hop_sign = torch.sign(adj_current_hop)
-        # 然后对符号矩阵按列求和，得到 degree_1，这表示在当前跳数下有多少个邻居是可达的。
+        # 计算符号矩阵每一列的元素和，即每个节点的非零邻居数量
         degree_1 = torch.sum(adj_current_hop_sign, dim=0)
-        # 计算度数的差异 degree - degree_1，这表示在当前跳数下，有多少个邻居是新的（即在当前跳数中新增的连接），将形状调整为(1,N) -1表示自动计算
+        # 将 (degree - degree_1) 的结果转换为密集张量，并调整形状为 (1, -1) 后存储到 results 的第 hop 行
         results[hop] = (degree-degree_1).to_dense().reshape(1, -1)
-        hop += 1
-    # 获取转置矩阵shape=[N,maxHop+1]
+
+    # 对 results 进行转置，将形状变为 (adj.shape[0], max_khop + 1)
     results = results.T
-    # 找到每个节点的
+    # 找到每一行的最大值所在的索引
     max_indices = torch.argmax(results, dim=1)
-    # 遍历每个节点
+
+    # 遍历 results 的每一行
     for i in range(results.shape[0]):
-        # 遍历每个节点的conductance值
+        # 遍历 results 的每一列
         for j in range(results.shape[1]):
-            # 如果当前索引大于最大值索引并且最大值索引不等于0
+            # 如果当前列索引 j 大于该行最大值所在的索引，并且最大值所在的索引不为 0
             if j>max_indices[i] and max_indices[i] != 0:
+                # 将该位置的元素置为 0
                 results[i][j] = 0
             else:
+                # 否则将该位置的元素置为 1
                 results[i][j] = 1
-    # 感觉是为了防止参数最大跳数设置为0的情况
-    if hop==1:
-        results=torch.ones((max_khop+1, adj.shape[0]))
+
+    if max_khop == 0:
+        results = torch.ones((adj.shape[0], max_khop + 1))
+    # 返回最终的结果矩阵
     return results
 
 # def f1_score_calculation(y_pred, y_true):
@@ -179,13 +198,15 @@ def conductance_hop(adj, max_khop):
 
 #     return mean(F1)
 
-def f1_score_calculation(y_pred, y_true):
+
+
+
+def f1_score_calculation(y_pred, y_true,args=None):
     y_pred = y_pred.reshape(1, -1)
     y_true = y_true.reshape(1, -1)
     pre = torch.sum(torch.multiply(y_pred, y_true))/(torch.sum(y_pred)+1E-9)
     rec = torch.sum(torch.multiply(y_pred, y_true))/(torch.sum(y_true)+1E-9)
     F1 = 2 * pre * rec / (pre + rec+1E-9)
-    print("recall: ", rec, "pre: ", pre)
     return F1
 
 
@@ -417,3 +438,139 @@ def MaxMinNormalization(x, Min, Max):
 
     return x
 
+
+def get_silhouette_score(feats, labels, goal=1.0):
+    device, dtype = feats.device, feats.dtype
+    unique_labels = torch.unique(labels)
+    num_samples = len(feats)
+    if not (1 < len(unique_labels) < num_samples):
+        raise ValueError("num unique labels must be > 1 and < num samples")
+
+    scores = []
+    score_dict = {}
+
+    for L in unique_labels:
+        if L < 0:
+            continue
+        curr_cluster = feats[labels == L]
+        num_elements = len(curr_cluster)
+        if num_elements > 1:
+            intra_cluster_dists = torch.cdist(curr_cluster, curr_cluster)
+            mean_intra_dists = torch.sum(intra_cluster_dists, dim=1) / (
+                num_elements - 1
+            )  # minus 1 to exclude self distance
+            dists_to_other_clusters = []
+            for otherL in unique_labels:
+                if otherL != L:
+                    other_cluster = feats[labels == otherL]
+                    inter_cluster_dists = torch.cdist(curr_cluster, other_cluster)
+                    mean_inter_dists = torch.sum(inter_cluster_dists, dim=1) / (
+                        len(other_cluster)
+                    )
+                    dists_to_other_clusters.append(mean_inter_dists)
+            dists_to_other_clusters = torch.stack(dists_to_other_clusters, dim=1)
+            min_dists, _ = torch.min(dists_to_other_clusters, dim=1)
+            curr_scores = (min_dists - mean_intra_dists) / (
+                torch.maximum(min_dists, mean_intra_dists)
+            )
+        else:
+            curr_scores = torch.tensor([0], device=device, dtype=dtype)
+
+        with torch.no_grad():
+            score_dict[f'silhouette/clust{L}'] = torch.mean(curr_scores).item()
+            score_dict[f'clust/size_{L}'] = num_elements
+        scores.append(curr_scores)
+
+    scores = torch.cat(scores, dim=0)
+    # if len(scores) != num_samples:
+    #     raise ValueError(
+    #         f"scores (shape {scores.shape}) should have same length as feats (shape {feats.shape})"
+    #     )
+    mean_score = torch.mean(scores)
+    goal_diff = goal - mean_score
+
+    score_dict['silhouette_base_score'] = mean_score.item()
+    score_dict['goal_diff'] = goal_diff.item()
+
+    return abs(goal_diff)
+
+# returns a negative version of the VRC index
+# (suitable for minimization)
+def vrc_index(feats: torch.Tensor, labels: torch.Tensor):
+    device, dtype = feats.device, feats.dtype
+    unique_labels = torch.unique(labels)
+    k = (unique_labels >= 0).sum()
+
+    num_samples = len(feats)
+    if not (1 < len(unique_labels) < num_samples):
+        raise ValueError("num unique labels must be > 1 and < num samples")
+
+    extra_disp, intra_disp = 0.0, 0.0
+    mean = torch.mean(feats, dim=0)
+
+    for k in range(k):
+        cluster_k = feats[labels == k]
+        mean_k = torch.mean(cluster_k, dim=0)
+        extra_disp += len(cluster_k) * torch.sum((mean_k - mean) ** 2)
+        intra_disp += torch.sum((cluster_k - mean_k) ** 2)
+
+    vrc_index = extra_disp * (num_samples - k) / (intra_disp * (k - 1.0))
+    return vrc_index
+
+
+def get_fast_silhouette(feats: torch.Tensor, labels: torch.Tensor, goal=1.0):
+    device, dtype = feats.device, feats.dtype
+    unique_labels = torch.unique(labels)
+    k = (unique_labels >= 0).sum()
+    unique_label_idxs = torch.arange(k, device=device)
+    num_samples = len(feats)
+    if not (1 < len(unique_labels) < num_samples):
+        raise ValueError("num unique labels must be > 1 and < num samples")
+
+    scores = []
+    score_dict = {}
+    # note: we have to compute this since we need gradients
+    cluster_centroids = []
+
+    for L in unique_labels:
+        if L < 0:
+            continue
+        curr_cluster = feats[labels == L]
+        num_elements = len(curr_cluster)
+        cluster_centroids.append(curr_cluster.mean(dim=0))
+    cluster_centroids = torch.vstack(cluster_centroids)
+
+    for Li in unique_label_idxs:
+        L = unique_labels[Li]
+        curr_cluster = feats[labels == L]
+        dists = torch.cdist(curr_cluster, cluster_centroids)
+        a = dists[:, Li]
+        selector = torch.ones(k, dtype=torch.bool, device=device)
+        selector[Li] = False
+        b = torch.min(dists[:, selector], dim=1).values
+        sils = (b - a) / torch.max(a, b)
+        scores.append(sils)
+
+        # with torch.no_grad():
+        #     score_dict[f'silhouette/clust{L}'] = torch.mean(curr_scores).item()
+        #     score_dict[f'clust/size_{L}'] = num_elements
+
+    scores = torch.cat(scores, dim=0)
+    # if len(scores) != num_samples:
+    #     raise ValueError(
+    #         f"scores (shape {scores.shape}) should have same length as feats (shape {feats.shape})"
+    #     )
+    mean_score = torch.mean(scores)
+    goal_diff = goal - mean_score
+
+    score_dict['silhouette_base_score'] = mean_score.item()
+    score_dict['goal_diff'] = goal_diff.item()
+
+    return abs(goal_diff)
+
+
+def subgraph(adj,features):
+    edge_index = transform_coo_to_edge_index(adj)
+    subgraph = Subgraph(x=features,edge_index=edge_index,)
+    subgraph.build()
+    return subgraph.search()
