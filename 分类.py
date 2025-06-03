@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 def social_data_aug():
     # 第一张表数据
@@ -315,16 +316,135 @@ def ablation():
 
     # 调整子图布局
     plt.tight_layout()
+def nmi_jac():
+
+    # 数据准备
+    datasets = ['Cornell', 'Cora', 'Citeseer', 'Photo']
+
+    # Inductive - NMI
+    qd_gnn_nmi = [0.0458, 0.0445, 0.0128, 0.0675]
+    coclep_nmi = [0.0089, 0.0512, 0.0131, 0.1258]
+    global_search_vrc_nmi = [0.0168, 0.0623, 0.0224, 0.2286]
+    global_search_sli_nmi = [0.0421, 0.1076, 0.1053, 0.2775]
+
+    # Inductive - JAC
+    qd_gnn_jac = [0.0236, 0.0021, 0.0158, 0.0183]
+    coclep_jac = [0.1786, 0.1858, 0.1862, 0.2832]
+    global_search_vrc_jac = [0.1964, 0.2395, 0.1885, 0.3883]
+    global_search_sli_jac = [0.2378, 0.2940, 0.2951, 0.4276]
+
+    # 柱状图参数
+    bar_width = 0.15
+    x = np.arange(len(datasets))
+
+    # 自定义函数用于格式化Y轴标签
+    def percent_formatter(x, pos):
+        return f'{x:.2f}'
+
+    # 自定义颜色方案
+    colors = {
+        'qd_gnn': '#4a86e8',  # 蓝色系
+        'coclep': '#6aa84f',  # 绿色系
+        'vrc': '#f1c232',  # 黄色系
+        'sli': '#f6b26b'  # 橙色系
+    }
+
+    # 自定义图案填充
+    hatch_patterns = ['//', 'xx', '..', 'oo']
+
+    # 设置图表风格
+    plt.style.use('seaborn-whitegrid')
+
+    # 创建画布和子图
+    fig, axes = plt.subplots(1, 2, figsize=(18, 8))
+
+    # ============================================
+    # 1. 绘制NMI图表
+    ax1 = axes[0]
+
+    # 绘制柱状图
+    bars1 = ax1.bar(x - 1.5 * bar_width, qd_gnn_nmi, width=bar_width,
+                    label='QD-GNN', hatch=hatch_patterns[0], color=colors['qd_gnn'], edgecolor='black')
+    bars2 = ax1.bar(x - 0.5 * bar_width, coclep_nmi, width=bar_width,
+                    label='CocLEP', hatch=hatch_patterns[1], color=colors['coclep'], edgecolor='black')
+    bars3 = ax1.bar(x + 0.5 * bar_width, global_search_vrc_nmi, width=bar_width,
+                    label='BotCS-GNR-VRC', hatch=hatch_patterns[2], color=colors['vrc'], edgecolor='black')
+    bars4 = ax1.bar(x + 1.5 * bar_width, global_search_sli_nmi, width=bar_width,
+                    label='BotCS-GNR-Sli', hatch=hatch_patterns[3], color=colors['sli'], edgecolor='black')
+
+    # 添加数据标签
+    def add_labels(ax, bars, decimal_places=4):
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005,
+                    f'{height:.{decimal_places}f}',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold', rotation=90)
+
+    add_labels(ax1, bars1)
+    add_labels(ax1, bars2)
+    add_labels(ax1, bars3)
+    add_labels(ax1, bars4)
+
+    # 图表装饰
+    ax1.set_xlabel('数据集', fontsize=16)
+    ax1.set_ylabel('NMI值', fontsize=16)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(datasets, fontsize=12)
+    ax1.legend(loc='upper left', fontsize=12, frameon=True, framealpha=0.9)
+    ax1.grid(axis='y', linestyle='--', alpha=0.7)
+    ax1.set_ylim(0, max(global_search_sli_nmi) * 1.15)  # 动态设置Y轴范围
+
+    # 设置Y轴格式
+    ax1.yaxis.set_major_formatter(FuncFormatter(percent_formatter))
+
+    # 添加网格线到柱状图背后
+    ax1.set_axisbelow(True)
+
+    # ============================================
+    # 2. 绘制JAC图表
+    ax2 = axes[1]
+
+    # 绘制柱状图
+    bars1 = ax2.bar(x - 1.5 * bar_width, qd_gnn_jac, width=bar_width,
+                    label='QD-GNN', hatch=hatch_patterns[0], color=colors['qd_gnn'], edgecolor='black')
+    bars2 = ax2.bar(x - 0.5 * bar_width, coclep_jac, width=bar_width,
+                    label='CocLEP', hatch=hatch_patterns[1], color=colors['coclep'], edgecolor='black')
+    bars3 = ax2.bar(x + 0.5 * bar_width, global_search_vrc_jac, width=bar_width,
+                    label='BotCS-GNR-VRC', hatch=hatch_patterns[2], color=colors['vrc'], edgecolor='black')
+    bars4 = ax2.bar(x + 1.5 * bar_width, global_search_sli_jac, width=bar_width,
+                    label='BotCS-GNR-Sli', hatch=hatch_patterns[3], color=colors['sli'], edgecolor='black')
+
+    # 添加数据标签
+    add_labels(ax2, bars1)
+    add_labels(ax2, bars2)
+    add_labels(ax2, bars3)
+    add_labels(ax2, bars4)
+
+    # 图表装饰
+    ax2.set_xlabel('数据集', fontsize=16)
+    ax2.set_ylabel('JAC值', fontsize=16)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(datasets, fontsize=12)
+    ax2.legend(loc='upper left', fontsize=12, frameon=True, framealpha=0.9)
+    ax2.grid(axis='y', linestyle='--', alpha=0.7)
+    ax2.set_ylim(0, max(global_search_sli_jac) * 1.15)  # 动态设置Y轴范围
+
+    # 设置Y轴格式
+    ax2.yaxis.set_major_formatter(FuncFormatter(percent_formatter))
+
+    # 添加网格线到柱状图背后
+    ax2.set_axisbelow(True)
 
 
 if __name__ == '__main__':
     # 超参实验绘图
     # social_data_aug()
-    transformer_heads1()
+    # transformer_heads1()
     # transformer_heads2()
     # semi_alpha2()
     # 消融实验绘图
     # ablation()
+    nmi_jac()
     # 设置支持中文的字体，以微软雅黑为例
     plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
     # 解决负号显示为方块的问题
