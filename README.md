@@ -5,8 +5,9 @@
 
 ```
 0: unzip dataset.zip
-1: python link_pretrain.py --dataset cora --batch_size 2708 --dropout 0.1 --hidden_dim 512 --hops 5  --n_heads 8 --n_layers 1 --pe_dim 3 --peak_lr 0.01  --weight_decay=1e-05 --epochs 100
-2: python accuracy_globalsearch.py
+1: make `pretrain_result`,`adj`,`model` directory
+2: python link_pretrain.py --dataset cora --batch_size 2708 --dropout 0.1 --hidden_dim 512 --hops 5  --n_heads 8 --n_layers 1 --pe_dim 3 --peak_lr 0.01  --weight_decay=1e-05 --epochs 100
+3: python accuracy_globalsearch.py
 ```
 
 
@@ -27,7 +28,21 @@ The first one is used for download datasets automatically and the second one is 
 
 ```
 
-
+### Parameters 
+#### link_pretrain.py 参数
+```
+-- dataset
+-- cluster kmeans/kmedoids 聚类方法
+-- cvi_method silhouette/vrc 损失函数方法
+-- encoder_method transformer/gcn 编码器方法
+-- loss cl 损失函数的消融实验参数
+```
+#### accuracy_globalsearch.py 参数
+```
+-- dataset
+-- cluster kmeans
+-- cvi_method silhouette
+```
 
 ### Folder Structure
 
