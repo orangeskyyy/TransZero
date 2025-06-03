@@ -4,7 +4,7 @@ import math
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-
+from torch_geometric.nn import GCNConv,GATConv
 def init_params(module, n_layers):
     if isinstance(module, nn.Linear):
         module.weight.data.normal_(mean=0.0, std=0.02 / math.sqrt(n_layers))
@@ -28,7 +28,8 @@ def gelu(x):
 class TransformerBlock(nn.Module):
     def __init__(
         self,
-        hops, 
+        hops,
+        encoder,
         input_dim,
         n_layers=6,
         num_heads=8,
@@ -51,7 +52,7 @@ class TransformerBlock(nn.Module):
 
         self.att_embeddings_nope = nn.Linear(self.input_dim, self.hidden_dim)
 
-        encoders = [EncoderLayer(self.hidden_dim, self.ffn_dim, self.dropout_rate, self.attention_dropout_rate, self.num_heads)
+        encoders = [self.get_encoder(encoder)
                     for _ in range(self.n_layers)]
         self.layers = nn.ModuleList(encoders)
         self.final_ln = nn.LayerNorm(hidden_dim)
@@ -69,16 +70,29 @@ class TransformerBlock(nn.Module):
 
         self.apply(lambda module: init_params(module, n_layers=n_layers))
 
-    def forward(self, batched_data):
+    def get_encoder(self,encoder_name):
+        if encoder_name == 'transformer':
+            return EncoderLayer(self.hidden_dim, self.ffn_dim, self.dropout_rate, self.attention_dropout_rate, self.num_heads)
+        elif encoder_name == 'gcn':
+            return GCNConv(in_channels=self.hidden_dim, out_channels=self.hidden_dim,add_self_loops=False)
+        else:
+            return GATConv(self.hidden_dim, self.ffn_dim)
+    def forward(self, batched_data,edge_index=None):
 
         # print(batched_data.shape)
         tensor = self.att_embeddings_nope(batched_data)
 
-        
+        tensor = tensor[:,0,:]
         # transformer encoder
         for enc_layer in self.layers:
             tensor = enc_layer(tensor)
-        
+        # gcn encoder
+        # tensor = tensor[:, 0, :]
+        # # transformer encoder
+        # for enc_layer in self.layers:
+        #     tensor = enc_layer(tensor, edge_index)
+        # tensor = tensor.unsqueeze(1).repeat(1, self.seq_len, 1)
+
         output = self.final_ln(tensor)
 
         # print(output.shape)

@@ -28,27 +28,45 @@ if __name__ == "__main__":
     adj, features = get_dataset(args.dataset, args.pe_dim)
     
 
-    start_feature_processing = time.time()
-    processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
-    if processed_features.shape[0] < 10000:
-        if args.sampler == 'conductance':
-            indicator = utils.conductance_hop(adj, args.hops) # return (N, hops+1)
-        else:
-            indicator = utils.subgraph(adj)
-        indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
-        processed_features = processed_features*indicator
-    t_feature_precessing = time.time() - start_feature_processing
-    print("feature process time: {:.4f}s".format(t_feature_precessing))
 
-    start = time.time()
-    print("starting transformer to coo")
-    adj = utils.transform_coo_to_csr(adj) # transform to csr to support slicing operation
-    print("start mini batch processing")
-    # 正负邻接矩阵样本
-    adj_batch, minus_adj_batch = utils.transform_sp_csr_to_coo(adj, args.batch_size, features.shape[0]) # transform to coo to support tensor operation
-    print(len(adj_batch[0]), len(minus_adj_batch[0]))
-    print("adj process time: {:.4f}s".format(time.time() - start))
-    
+
+    # 存储预处理数据
+    preprocess_file = '/root/autodl-tmp/preprocess/' +args.dataset  + '.pt'
+    if os.path.isfile(preprocess_file):
+        start_feature_processing = time.time()
+        processed_features = torch.load(preprocess_file)
+        t_feature_precessing = time.time() - start_feature_processing
+        print("feature process time: {:.4f}s".format(t_feature_precessing))
+    else:
+        start_feature_processing = time.time()
+        processed_features = utils.re_features(adj, features, args.hops)  # return (N, hops+1, d)
+        if processed_features.shape[0] < 10000:
+            if args.sampler == 'conductance':
+                indicator = utils.conductance_hop(adj, args.hops)  # return (N, hops+1)
+            else:
+                indicator = utils.subgraph(adj)
+            indicator = indicator.unsqueeze(2).repeat(1, 1, features.shape[1])
+            processed_features = processed_features * indicator
+        t_feature_precessing = time.time() - start_feature_processing
+        print("feature process time: {:.4f}s".format(t_feature_precessing))
+        torch.save(processed_features,preprocess_file)
+
+    adj_file = '/root/autodl-tmp/adj/' + args.dataset + '.pt'
+    if os.path.isfile(adj_file):
+        start = time.time()
+        adj_batch,minus_adj_batch = torch.load(adj_file)
+        print("adj process time: {:.4f}s".format(time.time() - start))
+    else:
+        start = time.time()
+        print("starting transformer to coo")
+        adj = utils.transform_coo_to_csr(adj)  # transform to csr to support slicing operation
+        print("start mini batch processing")
+        # 正负邻接矩阵样本
+        adj_batch, minus_adj_batch = utils.transform_sp_csr_to_coo(adj, args.batch_size, features.shape[
+            0])  # transform to coo to support tensor operation
+        print(len(adj_batch[0]), len(minus_adj_batch[0]))
+        print("adj process time: {:.4f}s".format(time.time() - start))
+        torch.save((adj_batch,minus_adj_batch),adj_file)
 
     data_loader = Data.DataLoader(processed_features, batch_size=args.batch_size, shuffle = False)
 
@@ -83,6 +101,8 @@ if __name__ == "__main__":
     t_start = time.time()
 
     loss_train_b = []
+    edge_index = utils.transform_coo_to_edge_index(adj).to(args.device)
+
     # 初始化最小损失值为正无穷
     min_loss = float('inf')
     for epoch in range(args.epochs):
@@ -95,8 +115,9 @@ if __name__ == "__main__":
             # print(nodes_features.shape)
             optimizer.zero_grad()
             node_tensor, neighbor_tensor = model(nodes_features)
+            # gcn encoder
+            # node_tensor, neighbor_tensor = model(nodes_features,edge_index)
 
-            # print(node_tensor.shape, neighbor_tensor.shape, adj_.shape, minus_adj.shape)
             if args.cvi_method == 'silhouette':
                 loss_cvi = model.cvis_loss(node_tensor,args.cluster,args.num_clusters,args.k_init,'silhouette')
             elif args.cvi_method == 'fast_silhouette':
@@ -105,7 +126,9 @@ if __name__ == "__main__":
                 loss_cvi = model.cvis_loss(node_tensor, args.cluster,args.num_clusters, args.k_init, 'vrc')
 
             loss_cl = model.contrastive_link_loss(node_tensor, neighbor_tensor, adj_, minus_adj)
-            loss_train = loss_cl + args.alpha*loss_cvi
+            loss_train = loss_cl + loss_cvi
+            # 损失函数消融
+            # loss_train = loss_cl
             loss_train.backward()
             optimizer.step()
             lr_scheduler.step()
@@ -113,7 +136,7 @@ if __name__ == "__main__":
                 min_loss = loss_train.item()
                 # 保存当前模型的编码器参数
                 # torch.save(model.encoder.state_dict(), args.save_path + args.dataset + '.pth')
-                torch.save(model.state_dict(), args.save_path + args.dataset + '.pth')
+                torch.save(model.state_dict(), args.save_path + args.dataset + '_'+args.cluster + '_' + args.cvi_method + '_' + args.encoder +'.pth')
                 print(f'Best model saved with loss: {min_loss:.4f}')
             loss_train_b.append(loss_train.item())
             # break
@@ -133,14 +156,12 @@ if __name__ == "__main__":
     node_embedding = []
     print('Start loading encoder....')
     best_model = PretrainModel(input_dim=processed_features.shape[2], config=args).to(args.device)
-    best_model.load_state_dict(torch.load(args.save_path + args.dataset + '.pth'))
-    # best_model.encoder.load_state_dict(torch.load(args.save_path + args.dataset + '.pth'))
+    best_model.load_state_dict(torch.load(args.save_path + args.dataset +'_'+args.cluster + '_' + args.cvi_method+ '_' +args.encoder +'.pth'))
     for _, item in enumerate(data_loader):
         nodes_features = item.to(args.device)
         node_tensor, neighbor_tensor = best_model(nodes_features) #(2708,512)
-        # node_tensor, neighbor_tensor = best_model.encoder(nodes_features) #(2708,512)
-        # neighbor_tensor = best_model.readout(neighbor_tensor, torch.tensor([0]).to(args.device))
-        # node_tensor, neighbor_tensor = node_tensor.squeeze(), neighbor_tensor.squeeze()
+        # gcn encoder
+        # node_tensor, neighbor_tensor = best_model(nodes_features,edge_index) #(2708,512)
         if len(node_embedding) == 0:
             node_embedding = np.concatenate((node_tensor.cpu().detach().numpy(), neighbor_tensor.cpu().detach().numpy()), axis=1)
             # node_embedding = node_tensor.cpu().detach().numpy()
@@ -150,4 +171,4 @@ if __name__ == "__main__":
             node_embedding = np.concatenate((node_embedding, new_node_embedding), axis=0)
     # 保存的节点预训练的embedding
     print('start saving node embedding...')
-    np.save(args.embedding_path + args.dataset  + '.npy', node_embedding)
+    np.save(args.embedding_path + args.dataset + '_'+args.cluster + '_' + args.cvi_method  + '_' +args.encoder +'.npy', node_embedding)

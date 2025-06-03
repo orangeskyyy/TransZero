@@ -11,7 +11,7 @@ import numpy as np
 import networkx as nx
 from numpy import *
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score, jaccard_score
-from sub_generate import Subgraph
+
 # Training settings
 def parse_args():
     """
@@ -79,12 +79,12 @@ def parse_args():
                         help='The path for the embedding to save')
 
     # model ablation
-    parser.add_argument('--encoder',type=str,default='transformer')
-    parser.add_argument('--sampler',type=str,default='conductance')
-    parser.add_argument('--cluster',type=str,default='kmeans')
+    parser.add_argument('--encoder',type=str,default='gcn')
+    parser.add_argument('--loss',type=str,default='cl',help='损失函数消融')
+    parser.add_argument('--cluster',type=str,default='kmedoids')
 
     # clustering parameters
-    parser.add_argument('--num_clusters', type=int, default=12,help='聚类中心数量')
+    parser.add_argument('--num_clusters', type=int, default=5,help='聚类中心数量')
     parser.add_argument('--k_init', type=int, default=5, help='聚类初始化次数')
     parser.add_argument('--cvi_method', type=str, default="silhouette",help='cvi指数计算方法')
     return parser.parse_args()
@@ -514,7 +514,7 @@ def vrc_index(feats: torch.Tensor, labels: torch.Tensor):
         extra_disp += len(cluster_k) * torch.sum((mean_k - mean) ** 2)
         intra_disp += torch.sum((cluster_k - mean_k) ** 2)
 
-    vrc_index = extra_disp * (num_samples - k) / (intra_disp * (k - 1.0))
+    vrc_index = extra_disp * (num_samples - k) / (intra_disp * (k - 1.0))*0.1
     return vrc_index
 
 
@@ -561,7 +561,7 @@ def get_fast_silhouette(feats: torch.Tensor, labels: torch.Tensor, goal=1.0):
     #         f"scores (shape {scores.shape}) should have same length as feats (shape {feats.shape})"
     #     )
     mean_score = torch.mean(scores)
-    goal_diff = goal - mean_score
+    goal_diff = (goal - mean_score)*0.1
 
     score_dict['silhouette_base_score'] = mean_score.item()
     score_dict['goal_diff'] = goal_diff.item()

@@ -16,16 +16,19 @@ def parse_args():
     parser.add_argument('--dataset', type=str, default='dblp', help='dataset name')
     parser.add_argument('--embedding_tensor_name', type=str, help='embedding tensor name')
     parser.add_argument('--EmbeddingPath', type=str, default='./pretrain_result/', help='embedding path')
-    parser.add_argument('--sampler_method',typ=str,default='conductance',help='数据采样方法')
-    parser.add_argument('--encoder_method',typ=str,default='transformer',help='编码器方法')
+    parser.add_argument('--loss',type=str,default='cl',help='损失函数消融')
+    parser.add_argument('--encoder_method',type=str,default='gcn',help='编码器方法')
+    parser.add_argument('--cluster',type=str,default='kmeans',help='cluster聚类选择')
+    parser.add_argument('--cvi_method',type=str,default='silhouette',help='cvi损失')
+    parser.add_argument('--t',type=float,default=0.5,help='搜素超参')
     return parser.parse_args()
 
-def subgraph_density_controled(candidate_score, graph_score):
+def subgraph_density_controled(candidate_score, graph_score,t):
     
-    weight_gain = (sum(candidate_score)-sum(graph_score)*(len(candidate_score)**1)/(len(graph_score)**1))/(len(candidate_score)**0.50)
+    weight_gain = (sum(candidate_score)-sum(graph_score)*(len(candidate_score)**1)/(len(graph_score)**1))/(len(candidate_score)**t)
     return weight_gain
 
-def GlobalSearch(query_index, graph_score):
+def GlobalSearch(query_index, graph_score,t):
 
     candidates = query_index
     selected_candidate = candidates
@@ -41,11 +44,11 @@ def GlobalSearch(query_index, graph_score):
     while True:
         candidates_half = query_index+[max2min_index[i] for i in range(0, int((startpoint+endpoint)/2))]
         candidate_score_half = [graph_score[i] for i in candidates_half]
-        candidates_density_half = subgraph_density_controled(candidate_score_half, graph_score)
+        candidates_density_half = subgraph_density_controled(candidate_score_half, graph_score,t)
 
         candidates = query_index+[max2min_index[i] for i in range(0, endpoint)]
         candidate_score = [graph_score[i] for i in candidates]
-        candidates_density = subgraph_density_controled(candidate_score, graph_score)
+        candidates_density = subgraph_density_controled(candidate_score, graph_score,t)
 
         if candidates_density>= candidates_density_half:
             startpoint = int((startpoint+endpoint)/2)
@@ -71,10 +74,10 @@ if __name__ == "__main__":
         args.embedding_tensor_name = args.dataset
     
 
-    embedding_tensor = torch.from_numpy(np.load(args.EmbeddingPath + args.embedding_tensor_name + '.npy'))
+    embedding_tensor = torch.from_numpy(np.load(args.EmbeddingPath + args.embedding_tensor_name +  '_' + args.cluster + '_' + args.cvi_method +  '_' +args.encoder_method +'.npy'))
     
     # load queries and labels
-    query, labels = load_query_n_gt("./dataset/", args.dataset, embedding_tensor.shape[0])
+    query, labels = load_query_n_gt("/root/autodl-tmp/dataset/", args.dataset, embedding_tensor.shape[0])
 
     start = time.time()
     query_feature = torch.mm(query, embedding_tensor) # (query_num, embedding_dim)
@@ -94,7 +97,7 @@ if __name__ == "__main__":
     for i in tqdm(range(query_score.shape[0])):
         query_index = (torch.nonzero(query[i]).squeeze()).reshape(-1)
 
-        selected_candidates = GlobalSearch(query_index.tolist(), query_score[i].tolist()) 
+        selected_candidates = GlobalSearch(query_index.tolist(), query_score[i].tolist(),args.t)
         for j in range(len(selected_candidates)):
             y_pred[i][selected_candidates[j]] = 1
         

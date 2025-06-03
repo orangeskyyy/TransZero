@@ -5,15 +5,18 @@ import scipy.sparse as sp
 
 from dgl.data import CoraGraphDataset, CiteseerGraphDataset, PubmedGraphDataset
 from dgl.data import  AmazonCoBuyPhotoDataset,CoauthorCSDataset,CoauthorPhysicsDataset
-
-
+from torch.nn.functional import normalize
+from tqdm import tqdm
+import numpy as np
 
 def get_dataset(dataset, pe_dim):
     if dataset in {"pubmed", "photo", "cs", "cora", "physics","citeseer"}:
         if dataset in {"photo", "cs"}:
-            file_path = "dataset/"+dataset+"_dgl.pt"
+            # file_path = "dataset/"+dataset+"_dgl.pt"
+            file_path = "/root/autodl-tmp/dataset/"+dataset+"_dgl.pt"
         else:
-            file_path = "dataset/"+dataset+"_pyg.pt"
+            # file_path = "dataset/"+dataset+"_pyg.pt"
+            file_path = "/root/autodl-tmp/dataset/" + dataset + "_pyg.pt"
         # file_path = "dataset/"+dataset+".pt"
         data_list = torch.load(file_path)
         
@@ -43,7 +46,8 @@ def get_dataset(dataset, pe_dim):
     
     
     elif dataset in {"texas", "cornell", "wisconsin", "dblp", "reddit"}:
-        file_path = "dataset/"+dataset+"_pyg.pt"
+        file_path = "/root/autodl-tmp/dataset/"+dataset+"_pyg.pt"
+        # file_path = "dataset/"+dataset+"_pyg.pt"
 
         data_list = torch.load(file_path)
        
@@ -61,7 +65,4 @@ def get_dataset(dataset, pe_dim):
     print(type(adj), type(features))
     
     return adj.cpu().type(torch.LongTensor), features.long()
-
-
-
 
